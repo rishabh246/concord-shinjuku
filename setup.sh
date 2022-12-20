@@ -5,19 +5,20 @@ rmmod pcidma
 rmmod dune
 
 # Set huge pages
-sudo sh -c 'for i in /sys/devices/system/node/node*/hugepages/hugepages-2048kB/nr_hugepages; do echo 4096 > $i; done'
+sudo sh -c 'for i in /sys/devices/system/node/node*/hugepages/hugepages-2048kB/nr_hugepages; do echo 8192 > $i; done'
 
 # Unbind NICs
-sudo ./deps/dpdk/tools/dpdk_nic_bind.py -u 83:00.0
+sudo ./deps/dpdk/tools/dpdk_nic_bind.py -u 0000:18:00.1
 
 # Build required kernel modules.
-make -s -C deps/dune
-make -s -C deps/pcidma
-make -s -C deps/dpdk config T=x86_64-native-linuxapp-gcc
+make -s -j16 -C deps/dune
+make -s -j16 -C deps/pcidma
+make -s -j16 -C deps/dpdk config T=x86_64-native-linuxapp-gcc
 cd deps/dpdk
     git apply ../dpdk.mk.patch
+    git apply ../dpdk_i40e.patch
 cd ../../
-make -s -C deps/dpdk
+make -s -j16 -C deps/dpdk
 
 # Insert kernel modules
 sudo insmod deps/dune/kern/dune.ko

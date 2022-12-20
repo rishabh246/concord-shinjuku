@@ -30,9 +30,17 @@ CONCORD_ROOT = $(ROOT_DIR)/../..
 CONCORD_LIB = $(CONCORD_ROOT)/src/lib/concord.a
 CONCORD_INC = $(CONCORD_ROOT)/src/lib
 
-BENCH_LIB = $(CONCORD_ROOT)/benchmarks/leveldb/lib/concord_apileveldb.a
-BENCH_INC = $(CONCORD_ROOT)/benchmarks/leveldb/lib
+# Libs
+# _ 	 ==> concord
+# _clear ==> without modifications
+# _rdtsc ==> with rdtsc pass
+CONCORD_LIB = $(CONCORD_ROOT)/benchmarks/leveldb/lib/concord_apileveldb.a
+CONCORD_INC = $(CONCORD_ROOT)/benchmarks/leveldb/lib
 
+# Libs
+# _ 	 ==> concord
+# _clear ==> without modifications
+# _rdtsc ==> with rdtsc pass
 LEVELDB_LIB = $(CONCORD_ROOT)/benchmarks/leveldb/leveldb/concord_libleveldb.a
 LEVELDB_INC = $(CONCORD_ROOT)/benchmarks/leveldb/leveldb/include
 
@@ -44,12 +52,12 @@ DUNE	= ../deps/dune
 PCIDMA	= ../deps/pcidma
 DPDK_INC = -I$(DPDK)/build/include -I$(DPDK)/lib/librte_eal/common -I$(DPDK)/drivers/net/ixgbe -I$(DPDK)/drivers/net/i40e
 INC	= -I../inc -I$(DUNE)/libdune -I../inc/lwip -I../inc/lwip/ipv4 -I../inc/lwip/ipv6 $(DPDK_INC) -include$(DUNE)/kern/dune.h
-INC	+= -I$(PCIDMA) -I$(CONCORD_INC) -I$(BENCH_INC) -I$(LEVELDB_INC)
+INC	+= -I$(PCIDMA) -I$(CONCORD_INC) -I$(CONCORD_INC) -I$(LEVELDB_INC)
 CC	= gcc
-CFLAGS= -g -Wall -fno-pie -fno-dwarf2-cfi-asm -fno-asynchronous-unwind-tables -O3 -mno-red-zone $(INC) -D__KERNEL__ -DFAKE_WORK $(EXTRA_CFLAGS)
+CFLAGS= -g -Wall -fno-pie -fno-dwarf2-cfi-asm -fno-asynchronous-unwind-tables -O3 -mno-red-zone $(INC) -D__KERNEL__ $(EXTRA_CFLAGS)
 LD	= g++
 LDFLAGS	= -T ix.ld -no-pie
-LDLIBS	= -lrt  -lpthread -lm -lnuma -ldl -lconfig $(LEVELDB_LIB) $(BENCH_LIB) -lgflags -lsnappy -lz -llz4
+LDLIBS	= -lrt  -lpthread -lm -lnuma -ldl -lconfig $(LEVELDB_LIB) $(CONCORD_LIB) -lgflags -lsnappy -lz -llz4
 WRAP_FLAGS = -Wl,-wrap,malloc -Wl,-wrap=malloc -Wl,-wrap=free -Wl,-wrap=calloc -Wl,-wrap=realloc 
 
 ifneq ($(DEBUG),)
@@ -112,4 +120,3 @@ clean:
 
 dist-clean: clean
 	rm *~
-

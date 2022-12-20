@@ -47,6 +47,7 @@
 #include <net/ethernet.h>
 #include <net/ip.h>
 #include <ix/ethdev.h>
+#include <ix/dispatch.h>
 
 #define DEFAULT_CONF_FILE "./shinjuku.conf"
 
@@ -57,6 +58,7 @@ extern int arp_insert(struct ip_addr *addr, struct eth_addr *mac);
 
 static config_t cfg;
 static char config_file[256];
+int req_offset = 1;
 
 static int parse_host_addr(void);
 static int parse_port(void);

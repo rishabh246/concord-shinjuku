@@ -58,7 +58,7 @@ volatile bool TEST_STARTED = false;
 #endif
 
 struct custom_payload* generate_benchmark_request(struct mbuf* temp, uint64_t t);
-struct db_req* generate_db_req(struct mbuf * temp);
+struct db_req* generate_db_req(struct request * req);
 
 /**
  * do_networking - implements networking core's functionality
@@ -66,26 +66,34 @@ struct db_req* generate_db_req(struct mbuf * temp);
 void do_networking(void)
 {
 	log_info("Do networking started \n");
-	int i, num_recv;
+	int i,j, num_recv;
+	rqueue.head = NULL;
 	while (1)
 	{
 		eth_process_poll();
 		num_recv = eth_process_recv();
 		if (num_recv == 0)
 			continue;
-		while (networker_pointers.cnt != 0)
-			;
+		while (networker_pointers.cnt != 0);
 		for (i = 0; i < networker_pointers.free_cnt; i++)
 		{
-			mbuf_free(networker_pointers.pkts[i]);
+			struct request * req = networker_pointers.reqs[i];
+			for (j = 0; j < req->pkts_length; j++) {
+				mbuf_free(req->mbufs[j]);
+			}
+			mempool_free(&request_mempool, req);
 		}
 		networker_pointers.free_cnt = 0;
-		for (i = 0; i < num_recv; i++)
-		{
-			networker_pointers.pkts[i] = recv_mbufs[i];
-			networker_pointers.types[i] = (uint8_t)recv_type[i];
-		}
-		networker_pointers.cnt = num_recv;
+		j = 0;
+        for (i = 0; i < num_recv; i++) {
+			struct request * req = rq_update(&rqueue, recv_mbufs[i]);
+			if (req) {
+				networker_pointers.reqs[j] = req;
+				networker_pointers.types[j] = (uint8_t) req->type;
+				j++;
+			}
+        }
+        networker_pointers.cnt = j;
 	}
 }
 
@@ -104,8 +112,8 @@ void do_fake_networking(int num_cpus)
 	log_info("Load level:  %f\n", load_level);
 	log_info("Test started\n");
 
-	uint64_t total_packet = 0;
-
+	uint64_t i, j, total_packet = 0;
+	rqueue.head = NULL;
 	while (!INIT_FINISHED);
 	
 	while (true)
@@ -119,22 +127,25 @@ void do_fake_networking(int num_cpus)
 		
 		
 		while (networker_pointers.cnt != 0);
-
-		for (uint64_t t = 0; t < networker_pointers.free_cnt; t++)
+		for (i = 0; i < networker_pointers.free_cnt; i++)
 		{
-			mbuf_free(networker_pointers.pkts[t]);
+			struct request * req = networker_pointers.reqs[i];
+			for (j = 0; j < req->pkts_length; j++) {
+				mbuf_free(req->mbufs[j]);
+			}
+			mempool_free(&request_mempool, req);
 		}
 
 		networker_pointers.free_cnt = 0;
 
 		for (uint64_t t = 0; t < ETH_RX_MAX_BATCH; t++)
 		{
-			struct mbuf* temp = mbuf_alloc_local();
-
-			generate_db_req(temp);
+			struct request * req = rq_update(&rqueue, recv_mbufs[i]);
+			if(req)
+				generate_db_req(req);
 	
 			// -------- Send --------
-			networker_pointers.pkts[t] = temp;
+			networker_pointers.reqs[t] = req;
 			networker_pointers.types[t] = 0; 	// For now, only 1 port/type
 		}
 		
@@ -143,15 +154,17 @@ void do_fake_networking(int num_cpus)
 }
 
 
-struct db_req* generate_db_req(struct mbuf * temp)
+struct db_req* generate_db_req(struct request * temp)
 {
-	struct db_req* req = mbuf_mtod(temp, struct db_req *);
+	struct db_req* req = mbuf_mtod(temp->mbufs[0], struct db_req *);
 	#if BENCHMARK_TYPE == 0
 	req->type = DB_ITERATOR; 
 	#elif BENCHMARK_TYPE == 1
-	req-> type = (rand() % 2) ? DB_GET : DB_ITERATOR;
+	req->type = (rand() % 2) ? DB_GET : DB_ITERATOR;
 	#elif BENCHMARK_TYPE == 2
-	req-> type = (rand() % 1000) < 995 ? DB_GET : DB_ITERATOR;
+	req->type = (rand() % 1000) < 995 ? DB_GET : DB_ITERATOR;
+	#elif (BENCHMARK_TYPE == 3) || (BENCHMARK_TYPE == 4)
+	req->type = DB_GET;
 	#else
   assert(0 && "Unknown benchmark type, quitting");
 	#endif
@@ -161,7 +174,11 @@ struct db_req* generate_db_req(struct mbuf * temp)
 		int key_num = rand() % DB_NUM_KEYS;
 		snprintf(req->key, KEYSIZE, "key%d", key_num);
 		strcpy(req->val, "fakevalue");
+		#if BENCHMARK_TYPE == 4
+		req->ns = (uint64_t)(get_random_expo(MU) * 1000);
+		#else
 		req->ns = BENCHMARK_SMALL_PKT_NS;
+		#endif 
 	} 
 	else if(req->type == DB_ITERATOR)
 	{
@@ -185,9 +202,9 @@ struct db_req* generate_db_req(struct mbuf * temp)
 	}
 
 	// Wait for given inter-arrival time
-	uint64_t wait_time_ns = get_random_expo(MU*load_level) * 1000;
-	uint64_t start_time = get_ns();
-	while(get_ns() - start_time < wait_time_ns);
+	uint64_t wait_time_cycles = (1000 * CPU_FREQ_GHZ)/(MU*load_level);
+	uint64_t start_time = rdtsc();
+	while(rdtsc() - start_time < wait_time_cycles);
 	req->ts = get_ns();
 	return req;
 }

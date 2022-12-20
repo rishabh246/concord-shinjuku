@@ -151,24 +151,34 @@ long bsys_udp_send(void __user *__restrict vaddr, size_t len,
 	KSTATS_VECTOR(bsys_udp_send);
 
 	/* validate user input */
-	if (unlikely(len > UDP_MAX_LEN))
+	if (unlikely(len > UDP_MAX_LEN)) {
+        log_debug("len > UDP_MAX_LEN\n");
 		return -RET_INVAL;
+    }
 
-	if (unlikely(copy_from_user(id, &tmp, sizeof(struct ip_tuple))))
+	if (unlikely(copy_from_user(id, &tmp, sizeof(struct ip_tuple)))) {
+        log_debug("copy_from_user(id, &tmp, sizeof(struct ip_tuple))\n");
 		return -RET_FAULT;
+    }
 
-	if (unlikely(!uaccess_zc_okay(vaddr, len)))
+	if (unlikely(!uaccess_zc_okay(vaddr, len))) {
+        log_debug("!uaccess_zc_okay(vaddr, len))\n");
 		return -RET_FAULT;
+    }
 
 	addr = (void *) vm_lookup_phys(vaddr, PGSIZE_2MB);
-	if (unlikely(!addr))
+	if (unlikely(!addr)) {
+        log_debug("!addr\n");
 		return -RET_FAULT;
+    }
 
 	addr = (void *)((uintptr_t) addr + PGOFF_2MB(vaddr));
 
 	pkt = mbuf_alloc_local();
-	if (unlikely(!pkt))
+	if (unlikely(!pkt)) {
+        log_debug("!pkt\n");
 		return -RET_NOBUFS;
+    }
 
 	iovs = mbuf_mtod_off(pkt, struct mbuf_iov *,
 			     align_up(UDP_PKT_SIZE, sizeof(uint64_t)));
@@ -197,6 +207,7 @@ long bsys_udp_send(void __user *__restrict vaddr, size_t len,
 
 	ret = udp_output(pkt, &tmp, len);
 	if (unlikely(ret)) {
+        log_debug("udp_output(pkt, &tmp, len) = %d\n", ret);
 		for (i = 0; i < pkt->nr_iov; i++)
 			mbuf_iov_free(&pkt->iovs[i]);
 		mbuf_free(pkt);

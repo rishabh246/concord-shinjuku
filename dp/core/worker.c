@@ -62,7 +62,6 @@
 #include "benchmark.h"
 #include <sys/stat.h>
 #include <fcntl.h>
-#include "concord.h"
 #include "concord-leveldb.h"
 
 #include <sys/types.h>
@@ -106,7 +105,6 @@ extern leveldb_readoptions_t *roptions;
 extern leveldb_writeoptions_t *woptions;
 
 #define PREEMPT_VECTOR 0xf2
-#define CPU_FREQ_GHZ 3.3
 
 /* Turn on to debug time lost in waiting for new req. ITERATOR_LIMIT must be power of 2*/
 #define ITERATOR_LIMIT 1
@@ -119,7 +117,9 @@ struct idle_timestamping {
 };
 struct idle_timestamping idle_timestamps[ITERATOR_LIMIT] = {0};
 uint64_t idle_timestamp_iterator = 0;
+#define MAGIC_CPU 0
 
+#if LATENCY_DEBUG == 1
 #define RESULTS_ITERATOR_LIMIT 1048576
 struct request_perf_results {
     uint64_t latency;
@@ -127,6 +127,7 @@ struct request_perf_results {
 };
 struct request_perf_results results[RESULTS_ITERATOR_LIMIT] = {0};
 uint64_t results_iterator = 0;
+#endif
 
 void print_stats(void){
     /* Idle time stats */
@@ -162,6 +163,8 @@ __thread int cpu_nr_;
 __thread volatile uint8_t finished;
 __thread uint8_t active_req;
 
+extern volatile bool INIT_FINISHED;
+
 // Added for leveldb
 extern uint8_t flag;
 
@@ -177,49 +180,24 @@ extern int dune_register_intr_handler(int vector, dune_intr_cb cb);
 
 pid_t worker_tid;
 
-struct response
-{
-    uint64_t runNs;
-    uint64_t genNs;
-};
-
-struct request
-{
-    uint64_t runNs;
-    uint64_t genNs;
-};
-
-/**
- * myresponse_init - allocates global response datastore
- */
-int myresponse_init(void)
-{
-    return mempool_create_datastore(&response_datastore, 128000,
-                                    sizeof(struct myresponse), 1,
-                                    MEMPOOL_DEFAULT_CHUNKSIZE,
-                                    "response");
-}
-
 /**
  * response_init - allocates global response datastore
  */
 int response_init(void)
 {
-    return myresponse_init();
-    // return mempool_create_datastore(&response_datastore, 128000,
-    //                                 sizeof(struct response), 1,
-    //                                 MEMPOOL_DEFAULT_CHUNKSIZE,
-    //                                 "response");
+        return mempool_create_datastore(&response_datastore, 128000,
+                                        sizeof(struct message), 1,
+                                        MEMPOOL_DEFAULT_CHUNKSIZE,
+                                        "response");
 }
-
 /**
  * response_init_cpu - allocates per cpu response mempools
  */
 int response_init_cpu(void)
 {
-    struct mempool *m = &percpu_get(response_pool);
-    return mempool_create(m, &response_datastore, MEMPOOL_SANITY_PERCPU,
-                          percpu_get(cpu_id));
+        struct mempool *m = &percpu_get(response_pool);
+        return mempool_create(m, &response_datastore, MEMPOOL_SANITY_PERCPU,
+                              percpu_get(cpu_id));
 }
 
 static void test_handler(struct dune_tf *tf)
@@ -232,7 +210,8 @@ static void test_handler(struct dune_tf *tf)
     dune_apic_eoi();
 
     /* Turn on to benchmark timeliness of yields */
-    // idle_timestamps[idle_timestamp_iterator].before_ctx = get_ns();
+    // if(cpu_nr_ == MAGIC_CPU)
+    //     idle_timestamps[idle_timestamp_iterator].before_ctx = rdtsc();
 
     swapcontext_fast_to_control(cont, &uctx_main);
 }
@@ -247,7 +226,8 @@ void concord_func()
     concord_preempt_now = 0;
 
     /* Turn on to benchmark timeliness of yields */
-    // idle_timestamps[idle_timestamp_iterator].before_ctx = get_ns();
+    // if(cpu_nr_ == MAGIC_CPU)
+    //     idle_timestamps[idle_timestamp_iterator].before_ctx = rdtsc();
 
     swapcontext_fast_to_control(cont, &uctx_main);
 }
@@ -268,7 +248,7 @@ static void generic_work(uint32_t msw, uint32_t lsw, uint32_t msw_id,
     void *data = (void *)((uint64_t)msw << 32 | lsw);
     int ret;
 
-    struct request *req = (struct request *)data;
+    struct message * req = (struct message *) data;
 
     // Added for leveldb
     // leveldb_readoptions_t *readoptions = leveldb_readoptions_create();
@@ -291,29 +271,28 @@ static void generic_work(uint32_t msw, uint32_t lsw, uint32_t msw_id,
     //     i++;
     // } while (i / 0.233 < req->runNs);
 
-    asm volatile("cli" ::
-                     :);
-
-    struct response *resp = mempool_alloc(&percpu_get(response_pool));
-    if (!resp)
-    {
-        log_warn("Cannot allocate response buffer\n");
-        finished = true;
-        swapcontext_very_fast(cont, &uctx_main);
+    if(req->runNs == 500){
+        simpleloop(BENCHMARK_SMALL_PKT_SPIN);
+    }
+    else{
+        simpleloop(BENCHMARK_LARGE_PKT_SPIN);
     }
 
-    resp->genNs = req->genNs;
-    resp->runNs = req->runNs;
+    asm volatile ("cli":::);
+
+    struct message resp;
+    resp.genNs = req->genNs;
+    resp.runNs = req->runNs;
+    resp.type = TYPE_RES;
+    resp.req_id = req->req_id;
+
     struct ip_tuple new_id = {
         .src_ip = id->dst_ip,
         .dst_ip = id->src_ip,
         .src_port = id->dst_port,
         .dst_port = id->src_port};
 
-    ret = udp_send((void *)resp, sizeof(struct response), &new_id,
-                   (uint64_t)resp);
-    // ret = udp_send_one((void *)resp, sizeof(struct response), &new_id,
-    //             (uint64_t) resp);
+    ret = udp_send_one((void *)&resp, sizeof(struct message), &new_id);
 
     if (ret)
         log_warn("udp_send failed with error %d\n", ret);
@@ -325,7 +304,6 @@ static void generic_work(uint32_t msw, uint32_t lsw, uint32_t msw_id,
 static inline void parse_packet(struct mbuf *pkt, void **data_ptr,
                                 struct ip_tuple **id_ptr)
 {
-    log_info("new packet \n");
     // Quickly parse packet without doing checks
     struct eth_hdr *ethhdr = mbuf_mtod(pkt, struct eth_hdr *);
     struct ip_hdr *iphdr = mbuf_nextd(ethhdr, struct ip_hdr *);
@@ -338,7 +316,7 @@ static inline void parse_packet(struct mbuf *pkt, void **data_ptr,
 
     if (unlikely(!mbuf_enough_space(pkt, udphdr, len)))
     {
-        log_warn("worker: not enough space in mbuf\n");
+        // log_warn("worker: not enough space in mbuf\n");
         (*data_ptr) = NULL;
         return;
     }
@@ -371,11 +349,8 @@ static inline void handle_new_packet(void)
     int ret;
     void *data;
     struct ip_tuple *id;
-    struct mbuf *pkt = (struct mbuf *)dispatcher_requests[cpu_nr_].requests[active_req].mbuf;
+    struct mbuf *pkt = (struct mbuf *)dispatcher_requests[cpu_nr_].requests[active_req].req->mbufs[0];
     parse_packet(pkt, &data, &id);
-
-    log_info("parse packet");
-
     if (data)
     {
         uint32_t msw = ((uint64_t)data & 0xFFFFFFFF00000000) >> 32;
@@ -397,7 +372,7 @@ static inline void handle_new_packet(void)
     }
     else
     {
-        log_info("OOPS No Data\n");
+        log_debug("OOPS No Data\n");
         finished = true;
     }
 }
@@ -409,7 +384,7 @@ static void do_db_generic_work(struct db_req *db_pkg, uint64_t start_time)
                      :);
     DB_REQ_TYPE type = db_pkg->type;
     uint64_t iter_cnt = 0;
-
+    
     switch (db_pkg->type)
     {
     case (DB_PUT):
@@ -491,12 +466,14 @@ static void do_db_generic_work(struct db_req *db_pkg, uint64_t start_time)
 
     TEST_TOTAL_PACKETS_COUNTER += 1;
     
+    #if LATENCY_DEBUG == 1
     /* Turn on to get results */
     uint64_t cur_time = rdtsc();
     uint64_t elapsed_time = cur_time - start_time;
     results[results_iterator].latency = elapsed_time/(CPU_FREQ_GHZ * 1000);
     results[results_iterator].slowdown = elapsed_time/(db_pkg->ns * CPU_FREQ_GHZ);
     results_iterator = (results_iterator+1) & (RESULTS_ITERATOR_LIMIT-1);
+    #endif
 
     if (TEST_TOTAL_PACKETS_COUNTER == BENCHMARK_STOP_AT_PACKET)
     {
@@ -524,14 +501,14 @@ static inline void handle_fake_new_packet(void)
     // struct custom_payload *req;
     struct db_req *req;
 
-    pkt = (struct mbuf *)dispatcher_requests[cpu_nr_].requests[active_req].mbuf;
+    pkt = (struct mbuf *)dispatcher_requests[cpu_nr_].requests[active_req].req;
 
     // req = mbuf_mtod(pkt, struct custom_payload *);
     req = mbuf_mtod(pkt, struct db_req *);
 
     if (req == NULL)
     {
-        log_info("OOPS No Data\n");
+        log_debug("OOPS No Data\n");
         finished = true;
         return;
     }
@@ -579,11 +556,14 @@ static inline void handle_request(void)
 static inline void handle_fake_request(void)
 {
     while (dispatcher_requests[cpu_nr_].requests[active_req].flag != READY);
-
     /* Turn on to debug time lost in waiting for new req */
-    // if(likely(IS_FIRST_PACKET))
-    //     idle_timestamp_iterator = (idle_timestamp_iterator+1) & (ITERATOR_LIMIT-1);
-    // idle_timestamps[idle_timestamp_iterator].start_req = get_ns();
+    // if(likely(IS_FIRST_PACKET)){
+    //     if(cpu_nr_ == MAGIC_CPU){
+    //         idle_timestamp_iterator = (idle_timestamp_iterator+1) & (ITERATOR_LIMIT-1);
+    //     }
+    // }
+    // if(cpu_nr_ == MAGIC_CPU)
+    //     idle_timestamps[idle_timestamp_iterator].start_req = rdtsc();
 
     preempt_check[cpu_nr_].timestamp = rdtsc();
     preempt_check[cpu_nr_].check = true;
@@ -601,7 +581,8 @@ static inline void handle_fake_request(void)
         handle_context();
     }
     /* Turn on to debug time lost in waiting for new req */
-    // idle_timestamps[idle_timestamp_iterator].after_ctx = get_ns();
+    // if(cpu_nr_ == MAGIC_CPU)
+    //     idle_timestamps[idle_timestamp_iterator].after_ctx = rdtsc();
 
     preempt_check[cpu_nr_].check = false;
 }
@@ -610,7 +591,7 @@ static inline void finish_request(void)
 {
     worker_responses[cpu_nr_].responses[active_req].timestamp = dispatcher_requests[cpu_nr_].requests[active_req].timestamp;
     worker_responses[cpu_nr_].responses[active_req].type = dispatcher_requests[cpu_nr_].requests[active_req].type;
-    worker_responses[cpu_nr_].responses[active_req].mbuf = dispatcher_requests[cpu_nr_].requests[active_req].mbuf;
+    worker_responses[cpu_nr_].responses[active_req].req = dispatcher_requests[cpu_nr_].requests[active_req].req;
     worker_responses[cpu_nr_].responses[active_req].rnbl = cont;
     worker_responses[cpu_nr_].responses[active_req].category = CONTEXT;
     if (finished)
@@ -624,7 +605,8 @@ static inline void finish_request(void)
     dispatcher_requests[cpu_nr_].requests[active_req].flag = DONE;
 
     /* Turn on to debug time lost in waiting for new req */
-    // idle_timestamps[idle_timestamp_iterator].after_response = get_ns();
+    // if(cpu_nr_ == MAGIC_CPU)
+    //     idle_timestamps[idle_timestamp_iterator].after_response = rdtsc();
 }
 
 void do_work(void)
@@ -638,10 +620,10 @@ void do_work(void)
 
     worker_tid = gettid();
 
-    printf("Worker %d started with tid %d\n", cpu_nr_, worker_tid);
+    log_info("Worker %d started with tid %d\n", cpu_nr_, worker_tid);
 
     cpu_preempt_points[cpu_nr_] = &concord_preempt_now;
-
+    while(!INIT_FINISHED);
     while (true)
     {
 #ifdef FAKE_WORK
