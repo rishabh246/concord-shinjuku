@@ -452,6 +452,20 @@ static inline struct request * rq_update(struct request_queue * rq, struct mbuf 
         return NULL;
 }
 
+static inline struct request * fake_work_rq_update(struct request_queue * rq, 
+                                                struct mbuf * pkt, uint16_t req_type)
+{
+        struct request * req = mempool_alloc(&request_mempool);
+        if (unlikely(!req)) {
+            mbuf_free(pkt);
+            return NULL;
+        }
+        req->type = req_type;
+        req->pkts_length = 1;
+        req->mbufs[0] = pkt;
+        return req;
+}
+
 volatile struct jbsq_preemption preempt_check[MAX_WORKERS];
 volatile struct networker_pointers_t networker_pointers;
 volatile struct jbsq_worker_response worker_responses[MAX_WORKERS];
