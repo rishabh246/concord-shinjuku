@@ -464,7 +464,7 @@ static inline void handle_fake_new_packet(void)
     int ret;
     struct db_req *req;
 
-    struct mbuf * pkt = (struct mbuf *) dispatcher_requests[cpu_nr_].req;
+    struct mbuf * pkt = (struct mbuf *) dispatcher_requests[cpu_nr_].req->mbufs[0];
 
     req = mbuf_mtod(pkt, struct db_req *);
 

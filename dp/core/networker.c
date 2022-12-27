@@ -126,7 +126,6 @@ void do_fake_networking(int num_cpus)
 			total_packet++;
 		#endif
 		
-		
 		while (networker_pointers.cnt != 0);
 
 		for (i = 0; i < networker_pointers.free_cnt; i++)
@@ -137,18 +136,20 @@ void do_fake_networking(int num_cpus)
 			}
 			mempool_free(&request_mempool, req);
 		}
-
 		networker_pointers.free_cnt = 0;
 
 		for (uint64_t t = 0; t < ETH_RX_MAX_BATCH; t++)
 		{
-			struct request * req = rq_update(&rqueue, recv_mbufs[i]);
-			if(req)
+			struct mbuf* temp = mbuf_alloc_local();
+			uint16_t req_type = 0; // For now, only 1 port/type
+			struct request * req = fake_work_rq_update(&rqueue, temp, req_type);
+			if(req){
+				/* -------- Generate fake req -------- */ 
 				generate_db_req(req);
-
-			// -------- Send --------
-			networker_pointers.reqs[t] = req;
-			networker_pointers.types[t] = 0; 	// For now, only 1 port/type
+				/* -------- Send -------- */ 
+				networker_pointers.reqs[t] = req;
+				networker_pointers.types[t] = req_type; 	
+			}
 		}
 		
 		networker_pointers.cnt = ETH_RX_MAX_BATCH;

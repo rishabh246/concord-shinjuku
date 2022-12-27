@@ -23,7 +23,7 @@
 #define METHOD_NONE     1
 
 // Debug Methods
-#define LATENCY_DEBUG   0
+#define LATENCY_DEBUG   1
 
 // If 0, runs leveldb. If 1 runs simpleloop
 #define RUN_UBENCH      1  

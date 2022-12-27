@@ -64,6 +64,10 @@ ifneq ($(LOAD_LEVEL),0)
 CFLAGS += -DLOAD_LEVEL=$(LOAD_LEVEL)
 endif
 
+ifneq ($(FAKE_WORK),)
+CFLAGS += -DFAKE_WORK
+endif
+
 SRCS =
 DIRS = core drivers lwip net sandbox
 
