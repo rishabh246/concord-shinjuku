@@ -212,7 +212,7 @@ static inline void dispatch_requests(uint64_t cur_time)
 
         int idle;
 
-		if(likely(idle_list_head < num_workers-1)){
+		if(likely(idle_list_head < num_workers)){
             idle = idle_list[idle_list_head];
             idle_list_head++;
             if (tskq_dequeue(&tskq, &rnbl, &req, &type,
