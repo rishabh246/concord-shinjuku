@@ -240,11 +240,20 @@ static void generic_work(uint32_t msw, uint32_t lsw, uint32_t msw_id,
     //     i++;
     // } while (i / 0.233 < req->runNs);
 
-    if(req->runNs == 500){
+    if(req->runNs == 5700){
         simpleloop(BENCHMARK_DB_GET_SPIN);
     }
-    else{
+    else if (req->runNs == 6000) {
         simpleloop(BENCHMARK_DB_ITERATOR_SPIN);
+    }
+    else if (req->runNs == 20000) {
+        simpleloop(BENCHMARK_DB_PUT_SPIN);
+    }
+    else if (req->runNs == 88000) {
+        simpleloop(BENCHMARK_DB_DELETE_SPIN);
+    }
+     else {
+        simpleloop(BENCHMARK_DB_SEEK_SPIN);
     }
 
     asm volatile ("cli":::);
