@@ -88,11 +88,14 @@ void concord_enable()
 }
 
 // ---- Added for tests ----
-extern volatile uint64_t TEST_TOTAL_PACKETS_COUNTER;
-extern volatile uint64_t TEST_RCVD_SMALL_PACKETS;
-extern volatile uint64_t TEST_RCVD_BIG_PACKETS;
+extern volatile uint64_t TEST_RCVD_DB_GET;
+extern volatile uint64_t TEST_RCVD_DB_ITERATOR;
+extern volatile uint64_t TEST_RCVD_DB_PUT;
+extern volatile uint64_t TEST_RCVD_DB_DELETE;
+extern volatile uint64_t TEST_RCVD_DB_SEEK; 
 extern volatile uint64_t TEST_START_TIME;
 extern volatile uint64_t TEST_END_TIME;
+extern volatile uint64_t TEST_TOTAL_PACKETS_COUNTER;
 extern volatile bool TEST_FINISHED;
 
 volatile bool IS_FIRST_PACKET = false;
@@ -272,10 +275,10 @@ static void generic_work(uint32_t msw, uint32_t lsw, uint32_t msw_id,
     // } while (i / 0.233 < req->runNs);
 
     if(req->runNs == 500){
-        simpleloop(BENCHMARK_SMALL_PKT_SPIN);
+        simpleloop(BENCHMARK_DB_GET_SPIN);
     }
     else{
-        simpleloop(BENCHMARK_LARGE_PKT_SPIN);
+        simpleloop(BENCHMARK_DB_ITERATOR_SPIN);
     }
 
     asm volatile ("cli":::);
@@ -389,6 +392,9 @@ static void do_db_generic_work(struct db_req *db_pkg, uint64_t start_time)
     {
     case (DB_PUT):
     {
+        #if RUN_UBENCH == 1 && BENCHMARK_TYPE ==5 
+        simpleloop(BENCHMARK_DB_PUT_SPIN);
+        #else
         char *db_err = NULL;
 
         PRE_PROTECTCALL;
@@ -399,12 +405,13 @@ static void do_db_generic_work(struct db_req *db_pkg, uint64_t start_time)
         POST_PROTECTCALL;
 
         break;
+        #endif
     }
 
     case (DB_GET):
     {
         #if RUN_UBENCH == 1
-        simpleloop(BENCHMARK_SMALL_PKT_SPIN);
+        simpleloop(BENCHMARK_DB_GET_SPIN);
         #else
         int read_len = VALSIZE;
         char* err;
@@ -420,6 +427,9 @@ static void do_db_generic_work(struct db_req *db_pkg, uint64_t start_time)
     }
     case (DB_DELETE):
     {
+        #if RUN_UBENCH == 1 && BENCHMARK_TYPE ==5 
+        simpleloop(BENCHMARK_DB_DELETE_SPIN);
+        #else
         int k = 0;
 
         while (k < 50000)
@@ -432,11 +442,12 @@ static void do_db_generic_work(struct db_req *db_pkg, uint64_t start_time)
         }
 
         break;
+        #endif
     }
     case (DB_ITERATOR):
     {
         #if RUN_UBENCH == 1
-        simpleloop(BENCHMARK_LARGE_PKT_SPIN); 
+        simpleloop(BENCHMARK_DB_ITERATOR_SPIN); 
         #else
         cncrd_leveldb_scan(db,roptions, 'musa');
         #endif
@@ -445,6 +456,9 @@ static void do_db_generic_work(struct db_req *db_pkg, uint64_t start_time)
 
     case (DB_SEEK):
     {
+        #if RUN_UBENCH == 1 && BENCHMARK_TYPE ==5 
+        simpleloop(BENCHMARK_DB_SEEK_SPIN);
+        #else
         PRE_PROTECTCALL;
         leveldb_iterator_t *iter = leveldb_create_iterator(db, roptions);
         POST_PROTECTCALL;
@@ -456,6 +470,7 @@ static void do_db_generic_work(struct db_req *db_pkg, uint64_t start_time)
         POST_PROTECTCALL;
 
         break;
+        #endif 
     }
     default:
         break;
@@ -481,14 +496,14 @@ static void do_db_generic_work(struct db_req *db_pkg, uint64_t start_time)
         TEST_FINISHED = true;
     }
 
-    if (type == DB_GET || type == DB_PUT){
-        TEST_RCVD_SMALL_PACKETS += 1;
+    switch (type){
+        case DB_GET: TEST_RCVD_DB_GET++; break; 
+        case DB_ITERATOR: TEST_RCVD_DB_ITERATOR++; break; 
+        case DB_PUT: TEST_RCVD_DB_PUT++; break; 
+        case DB_DELETE: TEST_RCVD_DB_DELETE++; break; 
+        case DB_SEEK: TEST_RCVD_DB_SEEK++; break; 
+        default: break;
     }
-    else
-    {
-        TEST_RCVD_BIG_PACKETS += 1;
-    }
-
     // printf("%llu\n", iter_cnt);
     finished = true;
     swapcontext_very_fast(cont, &uctx_main);
