@@ -47,8 +47,11 @@ void print_stats(void);
 
 volatile uint64_t TEST_START_TIME;
 volatile uint64_t TEST_END_TIME;
-volatile uint64_t TEST_RCVD_SMALL_PACKETS;
-volatile uint64_t TEST_RCVD_BIG_PACKETS;
+volatile uint64_t TEST_RCVD_DB_GET;
+volatile uint64_t TEST_RCVD_DB_ITERATOR;
+volatile uint64_t TEST_RCVD_DB_PUT;
+volatile uint64_t TEST_RCVD_DB_DELETE;
+volatile uint64_t TEST_RCVD_DB_SEEK;
 volatile uint64_t TEST_TOTAL_PACKETS_COUNTER = 0; 
 volatile bool 	 TEST_FINISHED = false;
 uint64_t dispatched_pkts = 0;
@@ -211,7 +214,7 @@ void do_dispatching(int num_cpus)
 			TEST_END_TIME = get_us();
 			log_info("\n\n ----------- Benchmark FINISHED ----------- \n");
 			log_info("Benchmark - Total number of packets %d \n", TEST_TOTAL_PACKETS_COUNTER);
-			log_info("Benchmark - %d big, %d small packets\n", TEST_RCVD_BIG_PACKETS, TEST_RCVD_SMALL_PACKETS);
+			log_info("Benchmark - %d DB_GET, %d DB_ITERATOR, %d DB_PUT, %d DB_DELETE, %d DB_SEEK\n", TEST_RCVD_DB_GET, TEST_RCVD_DB_ITERATOR, TEST_RCVD_DB_PUT, TEST_RCVD_DB_DELETE, TEST_RCVD_DB_SEEK);
 			log_info("Benchmark - Time elapsed (us): %llu\n",  TEST_END_TIME- TEST_START_TIME);
 			uint64_t rate =  dispatched_pkts*1000/(TEST_END_TIME- TEST_START_TIME);
 			log_info("Dispatched pkts, rate: %llu : %llu KRps\n", dispatched_pkts,rate);
