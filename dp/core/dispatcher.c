@@ -54,8 +54,11 @@ void print_stats(void);
 
 volatile uint64_t TEST_START_TIME;
 volatile uint64_t TEST_END_TIME;
-volatile uint64_t TEST_RCVD_SMALL_PACKETS;
-volatile uint64_t TEST_RCVD_BIG_PACKETS;
+volatile uint64_t TEST_RCVD_DB_GET;
+volatile uint64_t TEST_RCVD_DB_ITERATOR;
+volatile uint64_t TEST_RCVD_DB_PUT;
+volatile uint64_t TEST_RCVD_DB_DELETE;
+volatile uint64_t TEST_RCVD_DB_SEEK;
 volatile uint64_t TEST_TOTAL_PACKETS_COUNTER = 0; 
 volatile bool 	 TEST_FINISHED = false;
 uint64_t dispatched_pkts = 0;
@@ -212,7 +215,7 @@ static inline void dispatch_requests(uint64_t cur_time)
 
         int idle;
 
-		if(likely(idle_list_head < num_workers-1)){
+		if(likely(idle_list_head < num_workers)){
             idle = idle_list[idle_list_head];
             idle_list_head++;
             if (tskq_dequeue(&tskq, &rnbl, &req, &type,
@@ -461,7 +464,7 @@ static void dispatcher_do_db_generic_work(struct db_req *db_pkg, uint64_t start_
     case (DB_GET):
     {
         #if RUN_UBENCH == 1
-        dl_simpleloop(BENCHMARK_SMALL_PKT_SPIN);
+        dl_simpleloop(BENCHMARK_DB_GET_SPIN);
         #else
         int read_len = VALSIZE;
         char* err;
@@ -493,7 +496,7 @@ static void dispatcher_do_db_generic_work(struct db_req *db_pkg, uint64_t start_
     case (DB_ITERATOR):
     {
         #if RUN_UBENCH == 1
-        dl_simpleloop(BENCHMARK_LARGE_PKT_SPIN); 
+        dl_simpleloop(BENCHMARK_DB_ITERATOR_SPIN); 
         #else
         dl_cncrd_leveldb_scan(db,roptions, 'musa');
         #endif
@@ -519,12 +522,13 @@ static void dispatcher_do_db_generic_work(struct db_req *db_pkg, uint64_t start_
         TEST_FINISHED = true;
     }
 
-    if (type == DB_GET || type == DB_PUT){
-        TEST_RCVD_SMALL_PACKETS += 1;
-    }
-    else
-    {
-        TEST_RCVD_BIG_PACKETS += 1;
+    switch (type){
+        case DB_GET: TEST_RCVD_DB_GET++; break; 
+        case DB_ITERATOR: TEST_RCVD_DB_ITERATOR++; break; 
+        case DB_PUT: TEST_RCVD_DB_PUT++; break; 
+        case DB_DELETE: TEST_RCVD_DB_DELETE++; break; 
+        case DB_SEEK: TEST_RCVD_DB_SEEK++; break; 
+        default: break;
     }
 
     dispatcher_job_status = COMPLETED;
@@ -724,7 +728,7 @@ void do_dispatching(int num_cpus)
 			TEST_END_TIME = get_us();
 			log_info("\n\n ----------- Benchmark FINISHED ----------- \n");
 			log_info("Benchmark - Total number of packets %d \n", TEST_TOTAL_PACKETS_COUNTER);
-			log_info("Benchmark - %d big, %d small packets\n", TEST_RCVD_BIG_PACKETS, TEST_RCVD_SMALL_PACKETS);
+			log_info("Benchmark - %d DB_GET, %d DB_ITERATOR, %d DB_PUT, %d DB_DELETE, %d DB_SEEK\n", TEST_RCVD_DB_GET, TEST_RCVD_DB_ITERATOR, TEST_RCVD_DB_PUT, TEST_RCVD_DB_DELETE, TEST_RCVD_DB_SEEK);
 			log_info("Benchmark - Time elapsed (us): %llu\n",  TEST_END_TIME- TEST_START_TIME);
 			uint64_t rate =  dispatched_pkts*1000/(TEST_END_TIME- TEST_START_TIME);
 			log_info("Dispatched pkts, rate: %llu : %llu KRps\n", dispatched_pkts,rate);

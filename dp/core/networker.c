@@ -125,7 +125,6 @@ void do_fake_networking(int num_cpus)
 			total_packet++;
 		#endif
 		
-		
 		while (networker_pointers.cnt != 0);
 		for (i = 0; i < networker_pointers.free_cnt; i++)
 		{
@@ -135,23 +134,26 @@ void do_fake_networking(int num_cpus)
 			}
 			mempool_free(&request_mempool, req);
 		}
-
 		networker_pointers.free_cnt = 0;
 
 		for (uint64_t t = 0; t < ETH_RX_MAX_BATCH; t++)
 		{
-			struct request * req = rq_update(&rqueue, recv_mbufs[i]);
-			if(req)
+			struct mbuf* temp = mbuf_alloc_local();
+			uint16_t req_type = 0; // For now, only 1 port/type
+			struct request * req = fake_work_rq_update(&rqueue, temp, req_type);
+			if(req){
+				/* -------- Generate fake req -------- */ 
 				generate_db_req(req);
-	
-			// -------- Send --------
-			networker_pointers.reqs[t] = req;
-			networker_pointers.types[t] = 0; 	// For now, only 1 port/type
+				/* -------- Send -------- */ 
+				networker_pointers.reqs[t] = req;
+				networker_pointers.types[t] = req_type; 	
+			}
 		}
 		
 		networker_pointers.cnt = ETH_RX_MAX_BATCH;
 	}
 }
+
 
 
 struct db_req* generate_db_req(struct request * temp)
@@ -165,6 +167,17 @@ struct db_req* generate_db_req(struct request * temp)
 	req->type = (rand() % 1000) < 995 ? DB_GET : DB_ITERATOR;
 	#elif (BENCHMARK_TYPE == 3) || (BENCHMARK_TYPE == 4)
 	req->type = DB_GET;
+	#elif (BENCHMARK_TYPE == 5)
+	uint32_t num = rand() % 100;
+	if(num < 44)
+		req->type = DB_GET;
+	else if(num < 48)
+		req->type = DB_ITERATOR;
+	else if(num < 92)
+		req->type = DB_PUT;
+	else if(num < 96)
+		req->type = DB_DELETE;
+	else	req->type = DB_SEEK;
 	#else
   assert(0 && "Unknown benchmark type, quitting");
 	#endif
@@ -177,28 +190,32 @@ struct db_req* generate_db_req(struct request * temp)
 		#if BENCHMARK_TYPE == 4
 		req->ns = (uint64_t)(get_random_expo(MU) * 1000);
 		#else
-		req->ns = BENCHMARK_SMALL_PKT_NS;
+		req->ns = BENCHMARK_DB_GET_NS;
 		#endif 
 	} 
 	else if(req->type == DB_ITERATOR)
 	{
 		strcpy(req->key, "");
 		strcpy(req->key, "");
-		req->ns = BENCHMARK_LARGE_PKT_NS;
+		req->ns = BENCHMARK_DB_ITERATOR_NS;
 	}
 	else if(req->type == DB_DELETE)
 	{
+		#if BENCHMARK_TYPE == 5
+		req->ns = BENCHMARK_DB_DELETE_NS;
+		#endif
 	}
 	else if(req->type == DB_PUT)
 	{
-		int key_num = rand() % DB_NUM_KEYS;
-		snprintf(req->key, KEYSIZE, "key%d", key_num);
-		snprintf(req->val, VALSIZE, "val%d", key_num);
+		#if BENCHMARK_TYPE == 5
+		req->ns = BENCHMARK_DB_PUT_NS;
+		#endif	
 	}
 	else if (req->type == DB_SEEK)
 	{
-		strcpy(req->key, "");
-		strcpy(req->key, "");
+		#if BENCHMARK_TYPE == 5
+		req->ns = BENCHMARK_DB_SEEK_NS;
+		#endif	
 	}
 
 	// Wait for given inter-arrival time
