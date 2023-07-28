@@ -68,6 +68,23 @@ ifneq ($(FAKE_WORK),)
 CFLAGS += -DFAKE_WORK
 endif
 
+ifneq ($(SCHEDULE_METHOD),)
+CFLAGS += -DSCHEDULE_METHOD=$(SCHEDULE_METHOD)
+endif
+
+ifneq ($(DISPATCHER_DO_WORK),)
+CFLAGS += -DDISPATCHER_DO_WORK=$(DISPATCHER_DO_WORK)
+endif
+
+ifneq ($(RUN_UBENCH),)
+CFLAGS += -DRUN_UBENCH=$(RUN_UBENCH)
+endif
+
+ifneq ($(BENCHMARK_TYPE),)
+CFLAGS += -DBENCHMARK_TYPE=$(BENCHMARK_TYPE)
+endif
+
+
 SRCS =
 DIRS = core drivers lwip net sandbox
 
@@ -116,4 +133,3 @@ clean:
 
 dist-clean: clean
 	rm *~
-
