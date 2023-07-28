@@ -40,6 +40,18 @@
 #define RUN_UBENCH      1  
 #endif
 
+// Default values to avoid compiler errors. Will be overwritten below
+#define BENCHMARK_DB_GET_SPIN   365   
+#define BENCHMARK_DB_GET_NS     5700
+#define BENCHMARK_DB_ITERATOR_SPIN   390  
+#define BENCHMARK_DB_ITERATOR_NS     6000
+#define BENCHMARK_DB_PUT_SPIN   1280   
+#define BENCHMARK_DB_PUT_NS     20000
+#define BENCHMARK_DB_DELETE_SPIN   5650  
+#define BENCHMARK_DB_DELETE_NS     88000
+#define BENCHMARK_DB_SEEK_SPIN   6500  
+#define BENCHMARK_DB_SEEK_NS     100000
+
 #if RUN_UBENCH == 1
     // Different workload mixes 
     #ifndef BENCHMARK_TYPE
