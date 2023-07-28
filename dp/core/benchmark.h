@@ -11,9 +11,12 @@
 
 #define BENCHMARK_STOP_AT_PACKET     1000000000000
 #define BENCHMARK_DURATION_US        1000000 * 10 
-#define SCHEDULE_METHOD              METHOD_CONCORD
 #define DB_NUM_KEYS                  15000
 #define CPU_FREQ_GHZ                 2.5
+
+#ifndef SCHEDULE_METHOD
+#define SCHEDULE_METHOD              METHOD_CONCORD
+#endif
 
 // Set to -1 to run in infinite loop
 #define BENCHMARK_CREATE_NO_PACKET   -1
@@ -28,14 +31,21 @@
 #define LATENCY_DEBUG   1
 
 // Dispatcher do work
+#ifndef DISPATCHER_DO_WORK
 #define DISPATCHER_DO_WORK 0
+#endif
 
 // If 0, runs leveldb. If 1 runs simpleloop
+#ifndef RUN_UBENCH
 #define RUN_UBENCH      1  
+#endif
 
 #if RUN_UBENCH == 1
     // Different workload mixes 
-    #define BENCHMARK_TYPE    2 
+    #ifndef BENCHMARK_TYPE
+    #define BENCHMARK_TYPE 5
+    #endif
+
     #if BENCHMARK_TYPE == 0                      // 100% 100us.
     #define BENCHMARK_DB_GET_SPIN   62   
     #define BENCHMARK_DB_GET_NS     1000
